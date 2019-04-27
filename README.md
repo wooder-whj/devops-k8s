@@ -26,7 +26,7 @@ This is a daemon shell script for continuous integration, continuous delivery an
 cd $HOME/devops;chmod +x devops.sh;./devops.sh
 ```
 
-3. Prepare k8s deployment and service yaml templates with given file name *\<appName>\-\<tag>-deployment.yaml* and service  *\<appNmae>\-\<tag>-svc.yaml* respectively in directory $HOME/devops/yaml, this is an optional, if you do not provide those yaml,  the default templates are supplied as below
+3. Prepare k8s deployment and service yaml templates with given file name *\<appName>\-\<tag>-deployment.yaml* and  *\<appNmae>\-\<tag>-svc.yaml* respectively in directory $HOME/devops/yaml, this is optional, if you do not provide those yaml,  the default templates are supplied as below
 
     default *\<appName>\-\<tag>-deployment.yaml* 
 
