@@ -2,25 +2,27 @@
 mkdir -p backup
 mkdir -p yaml
 mkdir -p logs
-touch node-registry.txt
-touch jar-registry.txt
-host=`hostname`
+host=$(hostname)
 while true; do
-  test -e *.jar
+  ls *.jar > /dev/null 2>&1
   if [ $? == 0 ]; then
+     touch node-registry.txt
+     touch jar-registry.txt
      for jar in `ls *.jar`; do
+       uploadDone=`flock -x -n $jar -c "echo ok"`
+       if [ "$uploadDone" != "ok" ];then
+          continue
+       fi
 ##   generate Dockerfile
-       context=`ls $jar|awk -F'-' '{ print $1 } '`
+       appName=`ls $jar|awk -F'-' '{ print $1 } '`
        tag=`ls $jar|awk -F'-' '{ print $2 }'`
 ## check need to registry node or not
-       ##jarRegi=`sed -n "$context:$tag" jar-registry.txt`
-       count=`grep -c $context:$tag jar-registry.txt`
-       ##if [[ -z $jarRegi ]]; then
+       count=`grep -c $appName:$tag jar-registry.txt`
        if [ $count == '0' ]; then
-          echo "$context:$tag" >> jar-registry.txt
+          echo "$appName:$tag" >> jar-registry.txt
           for node in `kubectl get nodes|awk -F ' ' 'NR>1 { print $1 }'`; do
             if [ $host != $node ]; then
-              echo $node:$context:$tag >> node-registry.txt
+              echo $node:$appName:$tag >> node-registry.txt
             fi
           done
        fi
@@ -29,73 +31,59 @@ while true; do
        node=`echo $regi|awk -F':' '{ print $1}'`
        ssh -o NumberOfPasswordPrompts=0 root@$node "pwd" > /dev/null
        if [ $? == 0 ]; then
-         context=`echo $regi|awk -F':' '{ print $2 }'`
+         appName=`echo $regi|awk -F':' '{ print $2 }'`
          tag=`echo $regi|awk -F':' '{ print $3 }'`
-         test -e $context-$tag*.jar
+         test -e $appName-$tag*.jar
          if [ $? != 0 ]; then
-            sed -i "/$context:$tag/d" node-registry.txt
-            sed -i "/$context:$tag/d" jar-registry.txt
+            sed -i "/$appName:$tag/d" node-registry.txt
+            sed -i "/$appName:$tag/d" jar-registry.txt
          else
-           cat > Dockerfile << EOF
+           test -e Dockerfile-$appName-$tag
+           if [ $? != 0 ]; then
+             cat > Dockerfile-$appName-$tag << EOF
 FROM openjdk
-RUN mkdir -p /$context
-ADD ["./$jar","/$context/"]
-CMD java -jar /$context/$jar
+RUN mkdir -p /$appName
+ADD ["./$jar","/$appName/"]
+CMD java -jar /$appName/$jar
 EOF
 ##        ##build image
-           docker image inspect $context:$tag > /dev/null 2>&1
-           if [ $? == 0 ]; then
-              docker rmi $context:$tag
-           fi
-           docker build -t $context:$tag ./
-           docker save $context:$tag > /tmp/$context.tar.gz 
+             docker image inspect $appName:$tag > /dev/null 2>&1
+             if [ $? == 0 ]; then
+                docker rmi  -f $appName:$tag
+             fi
+             docker build -t $appName:$tag -f Dockerfile-$appName-$tag ./
+             docker save $appName:$tag > /tmp/$appName-$tag.tar.gz
+           fi 
 ##       ##build images for all joined nodes
-       # for node in `kubectl get nodes|awk -F ' ' 'NR>1 { print $1}'`; do
            if [ $host != $node ]; then
-             scp -i ~/.ssh/id_rsa /tmp/$context.tar.gz root@$node:/tmp
+             scp -i ~/.ssh/id_rsa /tmp/$appName-$tag.tar.gz root@$node:/tmp
              if [ $? == 0 ]; then
              ssh -i ~/.ssh/id_rsa root@$node > ./logs/ssh.log << EOF
-docker rmi -f $context:$tag
-docker load < /tmp/$context.tar.gz
+docker rmi -f $appName:$tag
+docker load < /tmp/$appName-$tag.tar.gz
 exit
 EOF
                 if [ $? == 0 ]; then
                    sed -i "/$node/d" node-registry.txt
                 fi
               fi
-##           if [ $? == 0 ]; then
-##            docker image inspect $context:$tag > /dev/null 2>&1
-##            if [ $? == 0 ]; then
-##               docker rmi $context:$tag > /dev/null 2>&1
-##               if [ $? != 0 ]; then
-##                  docker rmi -f $context:$tag
-##               fi               
-##            fi
-##              docker rmi -f $context:$tag
-##              docker load < /tmp/$context.tar.gz
-##              exit
-##           else
-##             echo "cannot login $node"
-##           fi
            fi   
-       # done
-         docker rmi $context:$tag
-         deploy=`echo $context"_deployment".yaml`
+         deploy=`echo $appName"_deployment".yaml`
          cat > ./yaml/$deploy << EOF
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
-  name: $context
+  name: $appName
 spec:
   replicas: 1
   template:
     metadata:
       labels:
-        app: $context
+        app: $appName
     spec:
       containers:
-      - name: $context
-        image: $context:$tag
+      - name: $appName
+        image: $appName:$tag
         imagePullPolicy: IfNotPresent
         env:
         - name: CONIGURATION-SERVER
@@ -112,16 +100,16 @@ spec:
         - containerPort: 8001
           hostPort: 8001
 EOF
-         svc=`echo $context"_svc".yaml`
+         svc=`echo $appName"_svc".yaml`
          cat > ./yaml/$svc << EOF
 apiVersion: v1
 kind: Service
 metadata:
- name: $context
+ name: $appName
  namespace: default
 spec:
   selector:
-   app: $context
+   app: $appName
   type: NodePort
   ports:
   - port: 8001
@@ -130,18 +118,19 @@ spec:
 EOF
          kubectl apply -f ./yaml/$deploy
          kubectl apply -f ./yaml/$svc
-     ## success=`sed -n "/$context:$tag/p" node-registry.txt`
-     ## if [[ -z $success ]]; then
-         success=`grep -c $context:$tag node-registry.txt`
+         success=`grep -c $appName:$tag node-registry.txt`
          if [ $success == '0' ]; then
-           sed -i "/$context:$tag/d" jar-registry.txt
+           docker rmi -f $appName:$tag
+           sed -i "/$appName:$tag/d" jar-registry.txt
            mv $jar ./backup
+           rm -f Dockerfile-$appName-$tag
+           rm -f /tmp/$appName-$tag.tar.gz
          fi
        fi
       fi 
     done
   else
-    rm -f *-registry.txt
+    rm -f Dockerfile*
     echo "no jar file found!"
     sleep 1
   fi
