@@ -1,4 +1,4 @@
-#devops-k8s
+# devops-k8s
 
 This is a daemon shell script for continuous integration, continuous delivery and continuous deployment with k8s. it will scan its located directory in k8s master nodes of clusters within interval one second for uploaded jar files, create dockerfiles with name *Dockerfile-\<appName>\-\<tag>*, build images with tag *\<appName>:\<tag>*  and security-copy those images across all joined nodes of k8s clusters, and then deploy pods and services within k8s clusters.
 
