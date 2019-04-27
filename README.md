@@ -19,7 +19,7 @@ This is a daemon shell script for continuous integration, continuous delivery an
 
 # Usage
 
-1. Create and download this script *shell/devops.sh* to directory *$HOME/devops/* ;
+1. Create and download this script *shell/devops.sh* to the directory *$HOME/devops/* in k8s master node of cluster ;
 2.  Launch daemon script *devops.sh* by executing following commands  
 
 ```shell
