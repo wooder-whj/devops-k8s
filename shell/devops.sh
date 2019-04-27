@@ -61,6 +61,7 @@ EOF
              ssh -i ~/.ssh/id_rsa root@$node > ./logs/ssh.log << EOF
 docker rmi -f $appName:$tag
 docker load < /tmp/$appName-$tag.tar.gz
+rm -f /tmp/$appName-$tag.tar.gz
 exit
 EOF
                 if [ $? == 0 ]; then
@@ -68,8 +69,10 @@ EOF
                 fi
               fi
            fi   
-         deploy=`echo $appName"_deployment".yaml`
-         cat > ./yaml/$deploy << EOF
+         deploy=`echo $appName-$tag"-deployment".yaml`
+         test -e ./yaml/$deploy
+         if [ $? != 0 ]; then
+           cat > ./yaml/$deploy << EOF
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
@@ -85,23 +88,15 @@ spec:
       - name: $appName
         image: $appName:$tag
         imagePullPolicy: IfNotPresent
-        env:
-        - name: CONIGURATION-SERVER
-          value: wo-management-config
-        - name: MYSQL-SERVER
-          value: mysql
-        - name: MYSQL-PORT
-          value: "3306"
-        - name: EUREKA-SERVER
-          value: eureka
-        - name: EUREKA-PORT
-          value: "8000"
         ports:
-        - containerPort: 8001
-          hostPort: 8001
+        - containerPort: 39001
+          hostPort: 39001
 EOF
-         svc=`echo $appName"_svc".yaml`
-         cat > ./yaml/$svc << EOF
+         fi
+         svc=`echo $appName-$tag"-svc".yaml`
+         test -e ./yaml/$svc
+         if [ $? != 0 ]; then
+           cat > ./yaml/$svc << EOF
 apiVersion: v1
 kind: Service
 metadata:
@@ -110,12 +105,11 @@ metadata:
 spec:
   selector:
    app: $appName
-  type: NodePort
   ports:
-  - port: 8001
-    targetPort: 8001
-    nodePort: 30801
+  - port: 38001
+    targetPort: 38001
 EOF
+         fi
          kubectl apply -f ./yaml/$deploy
          kubectl apply -f ./yaml/$svc
          success=`grep -c $appName:$tag node-registry.txt`
