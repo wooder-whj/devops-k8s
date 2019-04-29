@@ -38,6 +38,7 @@ while true; do
             sed -i "/$appName:$tag/d" node-registry.txt
             sed -i "/$appName:$tag/d" jar-registry.txt
          else
+           jar=`ls $appName-$tag*.jar`
            test -e Dockerfile-$appName-$tag
            if [ $? != 0 ]; then
              cat > Dockerfile-$appName-$tag << EOF

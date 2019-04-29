@@ -10,7 +10,7 @@ This is a daemon shell script for continuous integration, continuous delivery an
 - Docker
   - Docker version 18.09.5, build e8ff056
 
-# Feature
+# Features
 
 - [x] Re-devops  Joined Nodes Broken-Before-Cured-After
 - [x] Joined Nodes Auto-Detect
